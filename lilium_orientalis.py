@@ -52,6 +52,9 @@ def normalize(v):
 
 def smoothstep(a, b, x):
     """0 below a, 1 above b, smooth S-curve in between."""
+    if isinstance(x, float):                     # scalar fast path: np.clip on one number costs ~5 us, called ~1000x per frame
+        t = min(max((x - a) / max(b - a, 1e-9), 0.0), 1.0)
+        return t * t * (3.0 - 2.0 * t)
     t = np.clip((np.asarray(x, dtype=float) - a) / max(b - a, 1e-9), 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)
 
@@ -424,8 +427,8 @@ def update(items, t):
     for it in items:
         el, m = it["el"], it["el"].material
         s = float(smoothstep(el.surf_t0, el.surf_t1, t))
-        p = float(np.clip((t - el.wire_t0) / max(el.wire_t1 - el.wire_t0, 1e-9), 0, 1)) if "wire" in it else 0.0
-        pd = float(np.clip((t - m["dots_win"][0]) / (m["dots_win"][1] - m["dots_win"][0]), 0, 1)) if "dots_win" in m else p
+        p = min(max((t - el.wire_t0) / max(el.wire_t1 - el.wire_t0, 1e-9), 0.0), 1.0) if "wire" in it else 0.0
+        pd = min(max((t - m["dots_win"][0]) / (m["dots_win"][1] - m["dots_win"][0]), 0.0), 1.0) if "dots_win" in m else p
         if s <= 0 and p <= 0 and pd <= 0:                                           # not started yet: stay hidden
             if not it.get("hidden"):
                 hide(it)
@@ -433,7 +436,7 @@ def update(items, t):
             continue
         it["hidden"] = False
         win = el.material.get("rebuild_win")                                        # (0, end): shape depends on t
-        tc = float(np.clip(t, *win)) if win else 0.0
+        tc = min(max(float(t), win[0]), win[1]) if win else 0.0
         if (tc, s, p, pd) == it.get("state"):                                       # nothing changed: no work
             continue
         it["state"] = (tc, s, p, pd)
